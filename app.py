@@ -113,20 +113,27 @@ def exportar_graficos_png(df, graficos):
 
 
 
+
+@st.cache_data(show_spinner="Carregando planilha...", ttl=60)
+def ler_planilha(caminho, modificado_em):
+    """Lê a planilha Excel e retorna um DataFrame."""
+    try:
+        dados = pd.read_excel(caminho, engine="openpyxl")
+        dados.columns = [str(c).strip() for c in dados.columns]
+        return dados
+    except Exception as erro:
+        st.error(f"Erro ao ler a planilha: {erro}")
+        return pd.DataFrame()
+
 def carregar_dados():
     """Lê a planilha Excel."""
     if not ARQUIVO.exists():
         return pd.DataFrame(), None
 
     try:
-        dados = pd.read_excel(ARQUIVO, engine="openpyxl")
-        dados.columns = [str(c).strip() for c in dados.columns]
-
-        modificacao = datetime.fromtimestamp(
-            ARQUIVO.stat().st_mtime
-        )
-
-        return dados, modificacao
+        modificacao_ts = ARQUIVO.stat().st_mtime
+        dados = ler_planilha(ARQUIVO, modificacao_ts)
+        return dados, datetime.fromtimestamp(modificacao_ts)
 
     except Exception as erro:
         st.error(f"Erro ao ler a planilha: {erro}")
@@ -140,11 +147,11 @@ def contar_categorias(df, coluna):
 
     valores = (
         df[coluna]
+        .astype(object)
         .fillna("Não informado")
         .astype(str)
         .str.strip()
     )
-
     valores = valores.replace(
         {"": "Não informado", "nan": "Não informado"}
     )
@@ -173,58 +180,161 @@ def coluna_identificadora(coluna):
     return coluna_protegida(coluna) or bool(tokens & termos)
 
 
-def criar_grafico(df, coluna, cor, tipo, limite=10):
-    """Cria um gráfico adequado ao tipo de dado da coluna."""
-    if tipo == "numérico":
-        fig = px.histogram(
-            df,
-            x=coluna,
-            nbins=12,
-            color_discrete_sequence=[cor],
-        )
-        fig.update_xaxes(title=coluna)
-        fig.update_yaxes(title="Registros")
-    elif tipo == "data":
-        fig = px.histogram(
-            df,
-            x=coluna,
-            nbins=12,
-            color_discrete_sequence=[cor],
-        )
-        fig.update_xaxes(title=coluna)
-        fig.update_yaxes(title="Registros")
+
+def preparar_dados_grafico(df, coluna, tipo, limite=10):
+    """Prepara os dados editáveis sem alterar o DataFrame original."""
+
+    if tipo == "categoria":
+        contagem = contar_categorias(df, coluna)
+        contagem = contagem.sort_values(
+            ascending=False
+        ).head(limite)
+
+        dados = contagem.rename_axis(
+            "Categoria"
+        ).reset_index(name="Quantidade")
+
     else:
-        contagem = contar_categorias(df, coluna).sort_values(ascending=False)
-        contagem = contagem.head(limite).sort_values()
-        grafico_df = (
-            contagem.rename_axis("Categoria")
-            .reset_index(name="Quantidade")
+        valores = df[coluna].dropna()
+
+        if tipo == "data":
+            valores = pd.to_datetime(valores, errors="coerce").dropna()
+        else:
+            valores = pd.to_numeric(valores, errors="coerce").dropna()
+
+        if valores.empty:
+            return pd.DataFrame(
+                columns=["Categoria", "Quantidade"]
+            )
+
+        quantidade_faixas = min(10, max(1, valores.nunique()))
+
+        if valores.nunique() == 1:
+            dados = pd.DataFrame({
+                "Categoria": [str(valores.iloc[0])],
+                "Quantidade": [len(valores)]
+            })
+        else:
+            faixas = pd.cut(
+                valores,
+                bins=quantidade_faixas,
+                duplicates="drop"
+            )
+
+            contagem = faixas.value_counts(sort=False)
+
+            dados = pd.DataFrame({
+                "Categoria": contagem.index.astype(str),
+                "Quantidade": contagem.values
+            })
+
+    return dados.reset_index(drop=True)
+
+
+
+def preparar_dados_grafico(df, coluna, tipo, limite=10):
+    """Prepara os dados editáveis sem alterar o DataFrame original."""
+
+    if tipo == "categoria":
+        contagem = contar_categorias(df, coluna)
+        contagem = contagem.sort_values(
+            ascending=False
+        ).head(limite)
+
+        dados = contagem.rename_axis(
+            "Categoria"
+        ).reset_index(name="Quantidade")
+
+    else:
+        valores = df[coluna].dropna()
+
+        if tipo == "data":
+            valores = pd.to_datetime(valores, errors="coerce").dropna()
+        else:
+            valores = pd.to_numeric(valores, errors="coerce").dropna()
+
+        if valores.empty:
+            return pd.DataFrame(
+                columns=["Categoria", "Quantidade"]
+            )
+
+        quantidade_faixas = min(10, max(1, valores.nunique()))
+
+        if valores.nunique() == 1:
+            dados = pd.DataFrame({
+                "Categoria": [str(valores.iloc[0])],
+                "Quantidade": [len(valores)]
+            })
+        else:
+            faixas = pd.cut(
+                valores,
+                bins=quantidade_faixas,
+                duplicates="drop"
+            )
+
+            contagem = faixas.value_counts(sort=False)
+
+            dados = pd.DataFrame({
+                "Categoria": contagem.index.astype(str),
+                "Quantidade": contagem.values
+            })
+
+    return dados.reset_index(drop=True)
+
+def criar_grafico_editavel(
+    dados,
+    titulo,
+    tipo_grafico,
+    cor,
+    chave
+):
+    """Exibe o gráfico usando os dados editáveis do painel."""
+
+    if dados.empty:
+        st.warning("Não existem dados para exibir neste gráfico.")
+        return
+
+    dados = dados.copy()
+    dados["Categoria"] = dados["Categoria"].astype(str)
+    dados["Quantidade"] = pd.to_numeric(
+        dados["Quantidade"], errors="coerce"
+    ).fillna(0)
+
+    if tipo_grafico == "Pizza":
+        fig = px.pie(
+            dados,
+            names="Categoria",
+            values="Quantidade",
+            title=titulo,
+            color_discrete_sequence=[cor],
         )
+    else:
         fig = px.bar(
-            grafico_df,
+            dados,
             x="Quantidade",
             y="Categoria",
             orientation="h",
             text="Quantidade",
+            title=titulo,
             color_discrete_sequence=[cor],
         )
         fig.update_traces(textposition="outside")
         fig.update_yaxes(title=None, automargin=True)
-        fig.update_xaxes(title=None)
+        fig.update_xaxes(title="Quantidade")
 
     fig.update_layout(
-        height=280,
-        margin=dict(l=8, r=16, t=12, b=8),
-        showlegend=False,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#12306B", size=11),
+        height=350,
+        template="plotly_white",
+        margin=dict(l=8, r=20, t=55, b=15),
     )
+
     st.plotly_chart(
         fig,
         use_container_width=True,
-        config={"displayModeBar": False},
+        key=f"grafico_{chave}",
+        config={"displayModeBar": True},
     )
+
 
 
 
@@ -427,32 +537,80 @@ if df.empty:
 
 graficos = selecionar_graficos(df)
 
-if graficos:
-    st.download_button(
-        "Exportar gráficos (PNG)",
-        data=exportar_graficos_png(df, graficos),
-        file_name="graficos_planilha.zip",
-        mime="application/zip",
-        help="Baixa todos os gráficos do painel em arquivos PNG dentro de um ZIP.",
-    )
 
+if graficos:
     for inicio in range(0, len(graficos), 3):
         linha = st.columns(3, gap="medium")
-        for posicao, (campo, tipo) in enumerate(graficos[inicio:inicio + 3]):
+
+        for posicao, (campo, tipo) in enumerate(
+            graficos[inicio:inicio + 3]
+        ):
+            indice = inicio + posicao
+            chave = f"{indice}_{normalizar_texto(campo)}"
+
             with linha[posicao]:
                 with st.container(border=True):
-                    st.markdown(f"#### {campo}")
-                    criar_grafico(
-                        df,
-                        campo,
-                        CORES[(inicio + posicao) % len(CORES)],
-                        tipo,
+                    
+
+                    with st.expander("✏️ Editar gráfico"):
+                        titulo = st.text_input(
+                            "Título",
+                            value=campo,
+                            key=f"titulo_{chave}",
+                        )
+
+                        tipo_grafico = st.selectbox(
+                            "Tipo de gráfico",
+                            ["Barras", "Pizza"],
+                            key=f"tipo_{chave}",
+                        )
+
+                        cor = st.color_picker(
+                            "Cor do gráfico",
+                            value=CORES[indice % len(CORES)],
+                            key=f"cor_{chave}",
+                        )
+
+                        dados_originais = preparar_dados_grafico(
+                            df, campo, tipo
+                        )
+
+                        st.caption(
+                            "Edite os nomes e valores abaixo. "
+                            "Essas mudanças afetam apenas o gráfico."
+                        )
+
+                        dados_editados = st.data_editor(
+                            dados_originais,
+                            num_rows="dynamic",
+                            hide_index=True,
+                            use_container_width=True,
+                            key=f"dados_{chave}",
+                            column_config={
+                                "Categoria": st.column_config.TextColumn(
+                                    "Categoria"
+                                ),
+                                "Quantidade": st.column_config.NumberColumn(
+                                    "Quantidade",
+                                    min_value=0,
+                                    step=1,
+                                ),
+                            },
+                        )
+
+                    criar_grafico_editavel(
+                        dados_editados,
+                        titulo,
+                        tipo_grafico,
+                        cor,
+                        chave,
                     )
 else:
     st.info(
         "Não há colunas adequadas para gerar gráficos. "
         "Verifique se a planilha contém dados variados."
     )
+
 
 
 
@@ -467,23 +625,3 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
-# Informações da fonte
-with st.expander("Informações da atualização"):
-    st.write(f"Arquivo: {ARQUIVO.name}")
-
-    if data_modificacao:
-        st.write(
-            "Última modificação: "
-            f"{data_modificacao:%d/%m/%Y às %H:%M:%S}"
-        )
-
-    st.write(
-        "O painel verifica novamente a planilha a cada "
-        "60 segundos."
-    )
-
-    st.caption(
-        "Colunas com nomes que indicam dados pessoais ou identificadores "
-        "são omitidas dos indicadores e gráficos."
-    )
