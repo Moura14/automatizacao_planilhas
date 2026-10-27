@@ -105,7 +105,7 @@ def exibir_painel():
 
                 with linha[posicao]:
                     with st.container(border=True):
-                        st.markdown(f"#### {campo}")
+                        
 
                         with st.expander("✏️ Editar gráfico"):
                             titulo = st.text_input(
