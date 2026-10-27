@@ -178,17 +178,3 @@ def exibir_painel():
         unsafe_allow_html=True,
     )
 
-    with st.expander("Informações da atualização"):
-        st.write(f"Arquivo: {ARQUIVO.name}")
-
-        if data_modificacao:
-            st.write(
-                "Última modificação: "
-                f"{data_modificacao:%d/%m/%Y às %H:%M:%S}"
-            )
-
-        st.write("O painel verifica novamente a planilha a cada 60 segundos.")
-        st.caption(
-            "Colunas com nomes que indicam dados pessoais ou "
-            "identificadores são omitidas dos indicadores e gráficos."
-        )

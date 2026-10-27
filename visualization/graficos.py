@@ -48,6 +48,7 @@ def criar_grafico_editavel(
     fig.update_layout(
         height=350,
         template="plotly_white",
+        yaxis=dict(autorange="reversed"),
         margin=dict(l=8, r=20, t=55, b=15),
     )
 
