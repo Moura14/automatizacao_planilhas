@@ -16,6 +16,8 @@ CORES = ["#1769AA", "#13A66B", "#7048C8", "#087E9B", "#F08A24"]
 def exibir_painel():
 
     graficos_pdf = []
+    if "graficos_excluidos" not in st.session_state:
+        st.session_state["graficos_excluidos"] = set()
     st.markdown(
         """
         <div style="
@@ -72,6 +74,11 @@ def exibir_painel():
         st.stop()
 
     graficos = selecionar_graficos(df)
+    graficos = [
+    (campo, tipo)
+    for campo, tipo in graficos
+    if f"{campo}_{tipo}" not in st.session_state["graficos_excluidos"]
+]
 
     if graficos:
         chave_exportacao = (data_modificacao, tuple(graficos))
@@ -142,20 +149,40 @@ def exibir_painel():
                                 key=f"dados_{chave}",
                                 column_config={
                                     "Categoria": st.column_config.TextColumn(
-                                        "Categoria"
+                                        "Categoria",
+                                        required=False,
                                     ),
                                     "Quantidade": (
                                         st.column_config.NumberColumn(
                                             "Quantidade",
                                             min_value=0,
                                             step=1,
+                                            required=False,
                                         )
                                     ),
                                 },
                             )
 
+                            dados_para_grafico = dados_editados.dropna(
+                            subset=["Categoria", "Quantidade"]
+                        ).copy()
+
+                        dados_para_grafico = dados_para_grafico[
+                            dados_para_grafico["Categoria"].astype(str).str.strip().ne("")
+]
+
+                        if st.button(
+                            "🗑️ Excluir gráfico",
+                            key=f"excluir_{chave}",
+                            use_container_width=True,
+                        ):
+                            st.session_state["graficos_excluidos"].add(
+                                f"{campo}_{tipo}"
+                            )
+                            st.rerun()
+
                         criar_grafico_editavel(
-                            dados_editados,
+                            dados_para_grafico,
                             titulo,
                             tipo_grafico,
                             cor,
@@ -166,7 +193,7 @@ def exibir_painel():
                             "titulo": titulo,
                             "tipo": tipo_grafico,
                             "cor": cor,
-                            "dados": dados_editados.copy(),
+                            "dados": dados_para_grafico.copy(),
                         })
 
     else:
