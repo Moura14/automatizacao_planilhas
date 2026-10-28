@@ -7,12 +7,15 @@ from analytics.analise import preparar_dados_grafico, selecionar_graficos
 from dados.excel_reader import ARQUIVO, carregar_dados
 from export.png_export import exportar_graficos_png
 from visualization.graficos import criar_grafico_editavel
+from gerar_pdf import gerar_relatorio_pdf
 
 
 CORES = ["#1769AA", "#13A66B", "#7048C8", "#087E9B", "#F08A24"]
 
 
 def exibir_painel():
+
+    graficos_pdf = []
     st.markdown(
         """
         <div style="
@@ -158,11 +161,44 @@ def exibir_painel():
                             cor,
                             chave,
                         )
+
+                        graficos_pdf.append({
+                            "titulo": titulo,
+                            "tipo": tipo_grafico,
+                            "cor": cor,
+                            "dados": dados_editados.copy(),
+                        })
+
     else:
         st.info(
             "Não há colunas adequadas para gerar gráficos. "
             "Verifique se a planilha contém dados variados."
         )
+
+        
+    if graficos_pdf:
+        st.divider()
+        st.subheader("📄 Resumo visual em PDF")
+
+        if st.button("Gerar relatório em PDF"):
+            try:
+                pdf = gerar_relatorio_pdf(
+                    df=df,
+                    graficos=graficos_pdf,
+                    titulo="Resumo da Força de Trabalho MESP",
+                )
+
+                st.download_button(
+                    label="⬇️ Baixar resumo em PDF",
+                    data=pdf,
+                    file_name="resumo_forca_trabalho.pdf",
+                    mime="application/pdf",
+                    key="download_resumo_pdf",
+                )
+
+            except Exception as erro:
+                st.error(f"Erro ao gerar o PDF: {erro}")
+
 
     st.markdown(
         """
@@ -177,4 +213,5 @@ def exibir_painel():
         """,
         unsafe_allow_html=True,
     )
+
 
