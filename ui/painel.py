@@ -42,8 +42,18 @@ def exibir_painel():
         key="planilha_upload",
     )
 
+    if "nome_planilha" not in st.session_state:
+        st.session_state["nome_planilha"] = ARQUIVO.stem
+
+    if arquivo_enviado is not None:
+        st.session_state["nome_planilha"] = arquivo_enviado.name.rsplit(".", 1)[0]
+
+
+    nome_planilha = None
+
     if arquivo_enviado is not None:
         conteudo = arquivo_enviado.getvalue()
+        nome_planilha = arquivo_enviado.name.rsplit(".", 1)[0]
 
         try:
             pd.read_excel(BytesIO(conteudo), engine="openpyxl")
@@ -209,10 +219,12 @@ def exibir_painel():
 
         if st.button("Gerar relatório em PDF"):
             try:
+                
+
                 pdf = gerar_relatorio_pdf(
                     df=df,
                     graficos=graficos_pdf,
-                    titulo="Resumo da Força de Trabalho MESP",
+                    titulo=f"Relatório - {st.session_state['nome_planilha']}",
                 )
 
                 st.download_button(
