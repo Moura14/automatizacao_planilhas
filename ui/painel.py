@@ -13,11 +13,35 @@ from gerar_pdf import gerar_relatorio_pdf
 CORES = ["#1769AA", "#13A66B", "#7048C8", "#087E9B", "#F08A24"]
 
 
+def _limpar_estado_graficos():
+    prefixos = (
+        "titulo_",
+        "tipo_",
+        "cor_",
+        "dados_",
+        "grafico_",
+        "excluir_",
+    )
+    for chave in list(st.session_state.keys()):
+        if chave.startswith(prefixos):
+            del st.session_state[chave]
+
+    st.session_state["graficos_excluidos"] = set()
+    st.session_state.pop("chave_exportacao_graficos_png", None)
+    st.session_state.pop("arquivo_exportacao_graficos_png", None)
+    st.session_state.pop("download_resumo_pdf", None)
+
+
 def exibir_painel():
 
     graficos_pdf = []
     if "graficos_excluidos" not in st.session_state:
         st.session_state["graficos_excluidos"] = set()
+    if "upload_selecionado_antes" not in st.session_state:
+        st.session_state["upload_selecionado_antes"] = False
+    if "planilha_upload_removida" not in st.session_state:
+        st.session_state["planilha_upload_removida"] = True
+
     st.markdown(
         """
         <div style="
@@ -41,6 +65,17 @@ def exibir_painel():
         help="Selecione um arquivo Excel (.xlsx) para atualizar os dados.",
         key="planilha_upload",
     )
+
+    if arquivo_enviado is None:
+        if st.session_state["upload_selecionado_antes"]:
+            _limpar_estado_graficos()
+            st.session_state["planilha_upload_removida"] = True
+        st.session_state["upload_selecionado_antes"] = False
+    else:
+        if not st.session_state["upload_selecionado_antes"]:
+            _limpar_estado_graficos()
+            st.session_state["planilha_upload_removida"] = False
+        st.session_state["upload_selecionado_antes"] = True
 
     if "nome_planilha" not in st.session_state:
         st.session_state["nome_planilha"] = ARQUIVO.stem
@@ -83,7 +118,11 @@ def exibir_painel():
         )
         st.stop()
 
-    graficos = selecionar_graficos(df)
+    graficos = (
+        []
+        if st.session_state["planilha_upload_removida"]
+        else selecionar_graficos(df)
+    )
     graficos = [
     (campo, tipo)
     for campo, tipo in graficos
@@ -206,6 +245,8 @@ def exibir_painel():
                             "dados": dados_para_grafico.copy(),
                         })
 
+    elif st.session_state["planilha_upload_removida"]:
+        st.info("Planilha removida. Anexe outra planilha para gerar gráficos.")
     else:
         st.info(
             "Não há colunas adequadas para gerar gráficos. "
@@ -252,5 +293,3 @@ def exibir_painel():
         """,
         unsafe_allow_html=True,
     )
-
-
