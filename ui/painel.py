@@ -1,10 +1,7 @@
-from io import BytesIO
-
-import pandas as pd
 import streamlit as st
 
 from analytics.analise import preparar_dados_grafico, selecionar_graficos
-from dados.excel_reader import ARQUIVO, carregar_dados
+from dados.excel_reader import ARQUIVO, carregar_dados, ler_planilha_excel
 from export.png_export import exportar_graficos_png
 from visualization.graficos import criar_grafico_editavel
 from gerar_pdf import gerar_relatorio_pdf
@@ -91,7 +88,12 @@ def exibir_painel():
         nome_planilha = arquivo_enviado.name.rsplit(".", 1)[0]
 
         try:
-            pd.read_excel(BytesIO(conteudo), engine="openpyxl")
+            _, linha_cabecalho = ler_planilha_excel(
+                arquivo_enviado
+            )
+            st.caption(
+                f"Linha de títulos identificada: {linha_cabecalho}."
+            )
         except Exception as erro:
             st.error(f"Não foi possível ler a planilha enviada: {erro}")
         else:
